@@ -14,7 +14,7 @@ import tensorflow_hub as hub
 from six.moves.urllib.request import urlopen
 import scipy.io
 from time import time
-from utils import getImage_and_resize
+from utils import getImage_and_resize, load_saved_delf_data
 
 delf = hub.load('https://tfhub.dev/google/delf/1').signatures['default']
 
@@ -28,11 +28,7 @@ def run_delf(np_image):
       image_scales=tf.constant([0.25, 0.3536, 0.5, 0.7071, 1.0, 1.4142, 2.0]),
       max_feature_num=tf.constant(1000))
 
-def load_saved_delf_data():
-  delf_ds = np.load(f'Dataset/delf_demo.npy', allow_pickle=True)
-  labels = np.load(f'Dataset/delf_demo_labels.npy', allow_pickle=True)
-  images = np.load(f'Dataset/image.npz')
-  return delf_ds, labels, images['image']
+
 
 def change_data_range(min_latitude=None, min_longitude=None, max_latitude=None, max_longitude=None):
   pass
@@ -93,7 +89,7 @@ def match_images(result1, result2, gps, label, image1=None, image2=None):
     # print('None')
     pass
   
-  # # Visualize correspondences.
+  # Visualize correspondences.
   # _, ax = plt.subplots()
   # inlier_idxs = np.nonzero(inliers)[0]
   # plot_matches(
@@ -107,40 +103,70 @@ def match_images(result1, result2, gps, label, image1=None, image2=None):
   # ax.axis('off')
   # ax.set_title('DELF correspondences')
 
+  # plt.show()
 
-    return [inliers_num, label] + list(gps)
+  return [inliers_num, label] + list(gps)
   
-
-if __name__ == '__main__':
-    data, labels, images = load_saved_delf_data()
-
-    gps = scipy.io.loadmat('Dataset/GPS_Long_Lat_Compass.mat')
-    gps_compass = gps['GPS_Compass']
-    florida_idx=np.where(gps_compass[:,0]<=32.5)[0]
-
-    # gps_florida = gps_compass[florida_idx]
-
-    input_data_path = 'Dataset/example.jpg'
+def run_model(url):
+  img_path = tf.keras.utils.get_file(url.split('/')[-1], url)
     
-    input_data_image, input_data_array = getImage_and_resize(input_data_path)
+  input_data_image, input_data_array = getImage_and_resize(img_path)
+  
+  input_data = run_delf(input_data_array)
+  
+  compare_data = data[:]
+
+  start = time()
+
+  inliers=[]
+
+  for i in range(0,len(compare_data),5):
+      inliers.append(match_images(result1=input_data, 
+                                  result2=compare_data[i], 
+                                  gps=gps_compass[labels[i]], 
+                                  label=labels[i], 
+                                  image1=input_data_array.astype(dtype='uint8')), 
+                                  image2=images[i].astype(dtype='uint8')))
+  end = time()
+
+  inliers_sorted = sorted(inliers, key=lambda x: x[0], reverse=True)
+
+  print('run time: ', end-start)
+
+  return inliers_sorted
+
+# if __name__ == '__main__':
+#     data, labels, images = load_saved_delf_data() # main server 실행 시 미리 실행 필요
+
+#     gps = scipy.io.loadmat('Dataset/GPS_Long_Lat_Compass.mat')
+#     gps_compass = gps['GPS_Compass']
+#     florida_idx=np.where(gps_compass[:,0]<=32.5)[0]
+
+#     # gps_florida = gps_compass[florida_idx]
+#     url = 'https://upload.wikimedia.org/wikipedia/commons/2/28/Bridge_of_Sighs%2C_Oxford.jpg'
+#     input_data_path = tf.keras.utils.get_file(url.split('/')[-1], url)
     
-    input_data = run_delf(input_data_array)
+#     input_data_image, input_data_array = getImage_and_resize(input_data_path)
     
-    compare_data = data[:120]
+#     input_data = run_delf(input_data_array)
+    
+#     compare_data = data[:10]
 
-    start = time()
+#     start = time()
 
-    inliers=[]
+#     inliers=[]
 
-    for i in range(len(compare_data)):
-        inliers.append(match_images(result1=input_data, 
-                                    result2=compare_data[i], 
-                                    gps=gps_compass[labels[i]], 
-                                    label=labels[i], 
-                                    image1=input_data_array.astype(dtype='uint8'), 
-                                    image2=images[i].astype(dtype='uint8')))
-    end = time()
+#     for i in range(0,len(compare_data),5):
+#         inliers.append(match_images(result1=input_data, 
+#                                     result2=compare_data[i], 
+#                                     gps=gps_compass[labels[i]], 
+#                                     label=labels[i], 
+#                                     image1=input_data_array.astype(dtype='uint8'),
+#                                     image2=images[i].astype(dtype='uint8')))
+#     end = time()
 
-    inliers_sorted = sorted(inliers, key=lambda x: x[0], reverse=True)
+#     inliers_sorted = sorted(inliers, key=lambda x: x[0], reverse=True)
 
-    print('run time: ', end-start)
+#     print('run time: ', end-start)
+
+#     # print(inliers_sorted)
